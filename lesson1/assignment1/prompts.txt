@@ -1,0 +1,14 @@
+CODE GENERATION
+Write a FastAPI endpoint in Python that takes user_id, product_id, and quantity, validates quantity is 1–100, saves 
+the order to a list, and returns an order_id and timestamp.
+
+
+DATA
+Write a PostgreSQL query using CTEs that shows the top 5 regions by total revenue for completed orders in the last 
+90 days. Show region, total orders, total revenue, and average order value.
+
+
+DEVOPS
+Write a GitHub Actions YAML pipeline that runs on push to main, sets up Python 3.11, installs requirements, runs 
+pytest with coverage, builds a Docker image with the commit SHA as the tag, and pushes it to Docker Hub.
+
