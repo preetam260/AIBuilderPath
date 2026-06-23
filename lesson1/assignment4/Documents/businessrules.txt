@@ -1,0 +1,81 @@
+Auth Service Rule 1: User must exist and not be soft deleted to loginTest: LoginAsync with non-existent email → throws UnauthorizedException
+Rule 2: User must be active (IsActive = true) to loginTest: LoginAsync with IsActive=false user → throws UnauthorizedException
+Rule 3: Password must match stored hashTest: LoginAsync with wrong password → throws UnauthorizedException
+Rule 4: Successful login returns token with correct claimsTest: LoginAsync with valid credentials → returns LoginResponseDtowith correct Name, Email, Role and non-empty Token
+UserServiceRule 1: Email must be unique across all usersTest: CreateAsync with duplicate email → throws ConflictException
+Rule 2: Password is stored as BCrypt hash, never plaintextTest: CreateAsync → verify returned user PasswordHash != original password(check on repo mock that AddAsync was called with hashed value)
+Rule 3: Created users are active by defaultTest: CreateAsync → verify IsActive = true on created entity
+Rule 4: GetByIdAsync throws if user not foundTest: GetByIdAsync with unknown Guid → throws NotFoundException
+Rule 5: UpdateAsync only changes Name and PhoneNumberTest: UpdateAsync → verify Email and Role unchanged after update
+Rule 6: ActivateAsync sets IsActive = trueTest: ActivateAsync on inactive user → IsActive becomes true, UpdateAsync called
+Rule 7: DeactivateAsync sets IsActive = falseTest: DeactivateAsync on active user → IsActive becomes false, UpdateAsync called
+Rule 8: DeleteAsync soft deletes, not hard deletesTest: DeleteAsync → verify DeleteAsync on repo called (which sets IsDeleted=true),not Remove
+ApartmentServiceRule 1: Block + Number combination must be uniqueTest: CreateAsync with same Block+Number → throws ConflictException
+Rule 2: GetByIdAsync throws if not foundTest: GetByIdAsync with unknown Guid → throws NotFoundException
+Rule 3: Delete propagates soft deleteTest: DeleteAsync → verify repo.DeleteAsync called with correct entity
+ResidentServiceRule 1: User must exist before creating residencyTest: CreateAsync with non-existent UserId → throws NotFoundException
+Rule 2: Apartment must exist before creating residencyTest: CreateAsync with non-existent ApartmentId → throws NotFoundException
+Rule 3: A user can only have one active residency at a timeTest: CreateAsync when user already has active residency → throws ConflictException
+Rule 4: An apartment can only have one owner at a timeTest: CreateAsync with IsOwner=true when apartment already has owner→ throws ConflictException
+Rule 5: MoveOutDate cannot be before MoveInDateTest: MoveOutAsync with MoveOutDate < MoveInDate → throws BadRequestException
+Rule 6: Cannot move out an already moved out residentTest: MoveOutAsync on resident with existing MoveOutDate → throws BadRequestException
+Rule 7: GetCurrentByUserIdAsync throws if no active residencyTest: GetCurrentByUserIdAsync with user who has no active residency→ throws NotFoundException
+VisitorServiceRule 1: Registering resident must have active residencyTest: RegisterAsync with userId that has no active residency→ throws NotFoundException
+Rule 2: ETA must be in the futureTest: RegisterAsync with ETA in the past → throws BadRequestException
+Rule 3: ExpiresAt is always ETA + 24 hours (set by service, not client)Test: RegisterAsync → verify visitor.ExpiresAt == dto.ETA.AddHours(24)
+Rule 4: Status is auto set to Approved on registrationTest: RegisterAsync → verify visitor.Status == VisitorStatus.Approved
+Rule 5: QR token is generated and storedTest: RegisterAsync → verify QRService.GenerateTokenAsync called,visitor.QrToken is not empty
+Rule 6: Email is sent to visitor on registration with QRTest: RegisterAsync → verify EmailService.SendAsync called with visitor email
+Rule 7: Only Approved visitors can be checked inTest: CheckInAsync with visitor status = CheckedIn/Denied/Expired→ throws BadRequestException
+Rule 8: Expired pass sets status to Expired and rejects entryTest: CheckInAsync with ExpiresAt in past → throws BadRequestException,verify visitor.Status set to Expired
+Rule 9: Cannot check in a visitor already checked in (active entry exists)Test: CheckInAsync when active VisitorEntry exists → throws BadRequestException
+Rule 10: CheckIn creates a VisitorEntry recordTest: CheckInAsync success → verify VisitorEntries.AddAsync called,entry has correct VisitorId, StaffId, CheckinTime
+Rule 11: CheckIn updates visitor status to CheckedInTest: CheckInAsync success → verify visitor.Status == CheckedIn
+Rule 12: CheckIn notifies apartment residentsTest: CheckInAsync success → verify NotificationService.CreateAsynccalled for each active resident of the apartment
+Rule 13: CheckOut only works if visitor is currently CheckedInTest: CheckOutAsync with Status != CheckedIn → throws BadRequestException
+Rule 14: CheckOut requires an active entry to existTest: CheckOutAsync when no active VisitorEntry → throws NotFoundException
+Rule 15: CheckOut sets CheckoutTime and updates visitor statusTest: CheckOutAsync success → verify entry.CheckoutTime != null,visitor.Status == CheckedOut
+Rule 16: Only Approved visitors can be deniedTest: DenyAsync on CheckedIn/CheckedOut visitor → throws BadRequestException
+Rule 17: Deny notifies apartment residentsTest: DenyAsync → verify NotificationService.CreateAsync called
+MaintenanceBillServiceRule 1: Apartment must exist before creating billTest: CreateAsync with non-existent ApartmentId → throws NotFoundException
+Rule 2: No duplicate bills for same apartment + periodTest: CreateAsync when bill already exists for apartment+period→ throws ConflictException
+Rule 3: Due date must be in the futureTest: CreateAsync with DueDate in past → throws BadRequestException
+Rule 4: Bill creation notifies current residents of apartmentTest: CreateAsync success → verify NotificationService.CreateAsynccalled for each active resident
+Rule 5: ApplyPenaltiesAsync only targets Unpaid and Processing billspast their due dateTest: ApplyPenaltiesAsync → verify Overdue status and Penalty appliedonly to qualifying bills, Paid/Disputed bills untouched
+Rule 6: Penalty is 5% of BaseAmountTest: ApplyPenaltiesAsync → verify bill.Penalty == bill.BaseAmount * 0.05m
+Rule 7: ApplyPenaltiesAsync notifies residents of affected apartmentsTest: ApplyPenaltiesAsync → verify NotificationService.CreateAsynccalled for residents of overdue bill apartments
+Rule 8: Cannot delete Paid or Disputed billsTest: DeleteAsync on Paid bill → throws BadRequestExceptionTest: DeleteAsync on Disputed bill → throws BadRequestException
+Rule 9: GetMyBillsAsync requires active residencyTest: GetMyBillsAsync with userId that has no residency→ throws NotFoundException
+PaymentServiceRule 1: Cannot create payment order for already Paid billTest: CreateOrderAsync on Paid bill → throws BadRequestException
+Rule 2: Cannot create payment order for Disputed billTest: CreateOrderAsync on Disputed bill → throws BadRequestException
+Rule 3: Bill status moves to Processing after order creationTest: CreateOrderAsync success → verify bill.Status == Processing
+Rule 4: RazorpayOrderId stored in TransactionRef during ProcessingTest: CreateOrderAsync success → verify bill.TransactionRef == razorpayOrderId
+Rule 5: Invalid Razorpay signature throws BadRequestExceptionTest: VerifyAndCompleteAsync with wrong signature → throws BadRequestException
+Rule 6: Bill must be findable by RazorpayOrderId in TransactionRefTest: VerifyAndCompleteAsync with unknown orderId → throws NotFoundException
+Rule 7: Successful verification marks bill as PaidTest: VerifyAndCompleteAsync success → verify bill.Status == Paid
+Rule 8: PaidAt is set on successful paymentTest: VerifyAndCompleteAsync success → verify bill.PaidAt != null
+Rule 9: TransactionRef is replaced with RazorpayPaymentId after paymentTest: VerifyAndCompleteAsync success → verify bill.TransactionRef== dto.RazorpayPaymentId (not the order ID anymore)
+Rule 10: Successful payment notifies apartment residentsTest: VerifyAndCompleteAsync success → verify NotificationService.CreateAsynccalled for each active resident
+FacilityServiceRule 1: GetByIdAsync throws if facility not foundTest: GetByIdAsync with unknown Guid → throws NotFoundException
+Rule 2: GetActiveAsync returns only IsActive=true facilitiesTest: GetActiveAsync → verify only active facilities returned(mock returns mix, assert filtered result)
+Rule 3: DeleteAsync soft deletesTest: DeleteAsync → verify repo.DeleteAsync called, not Remove
+BookingServiceRule 1: Facility must exist to bookTest: CreateAsync with non-existent FacilityId → throws NotFoundException
+Rule 2: Facility must be active to bookTest: CreateAsync with IsActive=false facility → throws BadRequestException
+Rule 3: StartTime must be before EndTimeTest: CreateAsync with StartTime >= EndTime → throws BadRequestException
+Rule 4: Booking must be for a future timeTest: CreateAsync with StartTime in past → throws BadRequestException
+Rule 5: Overlapping bookings are rejected (Pending or Confirmed only)Test: CreateAsync when GetByDateRangeAsync returns existing bookings→ throws ConflictException
+Rule 6: TotalCost = HourlyRate × duration in hoursTest: CreateAsync with 2hr slot, HourlyRate=500 → TotalCost == 1000
+Rule 7: Booking is created with Confirmed statusTest: CreateAsync success → verify booking.Status == Confirmed
+Rule 8: Booking confirmation notifies the userTest: CreateAsync success → verify NotificationService.CreateAsync calledwith correct userId
+Rule 9: Only booking owner can cancelTest: CancelAsync with userId != booking.UserId → throws UnauthorizedException
+Rule 10: Cannot cancel already cancelled bookingTest: CancelAsync on Cancelled booking → throws BadRequestException
+Rule 11: Cannot cancel completed bookingTest: CancelAsync on Completed booking → throws BadRequestException
+Rule 12: Cancellation notifies the userTest: CancelAsync success → verify NotificationService.CreateAsync called
+Rule 13: CompleteAsync only works on Confirmed bookingsTest: CompleteAsync on Pending/Cancelled booking → throws BadRequestException
+AnnouncementServiceRule 1: ExpiresAt must be in the future on createTest: CreateAsync with ExpiresAt in past → throws BadRequestException
+Rule 2: ExpiresAt must be in the future on updateTest: UpdateAsync with ExpiresAt in past → throws BadRequestException
+Rule 3: GetByIdAsync throws if not foundTest: GetByIdAsync with unknown Guid → throws NotFoundException
+NotificationServiceRule 1: MarkAsReadAsync throws if notification not foundTest: MarkAsReadAsync with unknown Guid → throws NotFoundException
+Rule 2: MarkAsReadAsync sets IsRead = trueTest: MarkAsReadAsync success → verify notification.IsRead == true,UpdateAsync called
+Rule 3: MarkAllAsReadAsync only touches unread notificationsTest: MarkAllAsReadAsync → verify UpdateAsync called only forunread notifications, read ones untouched
+Rule 4: CreateAsync persists notification with correct fieldsTest: CreateAsync → verify AddAsync called with correctUserId, Title, Message, IsRead=false
